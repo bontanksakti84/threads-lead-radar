@@ -8,14 +8,18 @@ import (
 )
 
 type ScanRun struct {
-	ID           string
-	StartedAt    time.Time
-	FinishedAt   *time.Time
-	KeywordCount int
-	PostsFound   int
-	LeadsFound   int
-	Status       string
-	ErrorMessage string
+	ID              string
+	StartedAt       time.Time
+	FinishedAt      *time.Time
+	KeywordCount    int
+	PostsFound      int
+	CandidatesFound int
+	NewLeads        int
+	ExistingLeads   int
+	GroqCalls       int
+	DurationMs      int64
+	Status          string
+	ErrorMessage    string
 }
 
 type ScanRunRepository struct {
@@ -23,9 +27,7 @@ type ScanRunRepository struct {
 }
 
 func NewScanRunRepository(db *pgxpool.Pool) *ScanRunRepository {
-	return &ScanRunRepository{
-		db: db,
-	}
+	return &ScanRunRepository{db: db}
 }
 
 func (r *ScanRunRepository) Start(
@@ -58,7 +60,11 @@ func (r *ScanRunRepository) Complete(
 	ctx context.Context,
 	id string,
 	postsFound int,
-	leadsFound int,
+	candidatesFound int,
+	newLeads int,
+	existingLeads int,
+	groqCalls int,
+	durationMs int64,
 ) error {
 	_, err := r.db.Exec(
 		ctx,
@@ -68,12 +74,22 @@ func (r *ScanRunRepository) Complete(
 			finished_at = now(),
 			posts_found = $2,
 			leads_found = $3,
+			candidates_found = $4,
+			new_leads = $5,
+			existing_leads = $6,
+			groq_calls = $7,
+			duration_ms = $8,
 			status = 'completed'
 		where id = $1
 		`,
 		id,
 		postsFound,
-		leadsFound,
+		newLeads,
+		candidatesFound,
+		newLeads,
+		existingLeads,
+		groqCalls,
+		durationMs,
 	)
 
 	return err

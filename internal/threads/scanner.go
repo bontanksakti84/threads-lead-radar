@@ -2,20 +2,23 @@ package threads
 
 import (
 	"context"
-	"log"
-	"time"
-
+	"fmt"
 	"github.com/bontanksakti84/threads-lead-radar/internal/ai"
 	"github.com/bontanksakti84/threads-lead-radar/internal/leads"
 	"github.com/bontanksakti84/threads-lead-radar/internal/scoring"
+	"github.com/bontanksakti84/threads-lead-radar/internal/telegram"
+	"log"
+	"time"
 )
 
 type Scanner struct {
-	client      Client
-	leadService *leads.Service
-	keywordRepo *leads.KeywordRepository
-	classifier  ai.Classifier
-	scanRunRepo *leads.ScanRunRepository
+	client            Client
+	leadService       *leads.Service
+	keywordRepo       *leads.KeywordRepository
+	classifier        ai.Classifier
+	scanRunRepo       *leads.ScanRunRepository
+	telegramBot       *telegram.Bot
+	telegramThreshold int
 }
 
 type ScanStats struct {
@@ -33,13 +36,17 @@ func NewScanner(
 	keywordRepo *leads.KeywordRepository,
 	classifier ai.Classifier,
 	scanRunRepo *leads.ScanRunRepository,
+	telegramBot *telegram.Bot,
+	telegramThreshold int,
 ) *Scanner {
 	return &Scanner{
-		client:      client,
-		leadService: leadService,
-		keywordRepo: keywordRepo,
-		classifier:  classifier,
-		scanRunRepo: scanRunRepo,
+		client:            client,
+		leadService:       leadService,
+		keywordRepo:       keywordRepo,
+		classifier:        classifier,
+		scanRunRepo:       scanRunRepo,
+		telegramBot:       telegramBot,
+		telegramThreshold: telegramThreshold,
 	}
 }
 
@@ -120,6 +127,31 @@ func (s *Scanner) Scan(ctx context.Context, keyword string) error {
 			leadPost,
 		); err != nil {
 			return err
+		}
+
+		if s.telegramBot != nil &&
+			classification.LeadScore >= s.telegramThreshold {
+
+			message := telegram.FormatLeadAlert(
+				leadPost,
+				classification,
+				classification.LeadScore,
+				matchedKeywords,
+			)
+
+			if err := s.telegramBot.SendMessage(ctx, message); err != nil {
+				log.Printf(
+					"Telegram notification failed for %s: %v",
+					leadPost.ExternalID,
+					err,
+				)
+			} else {
+				log.Printf(
+					"Telegram notification sent: %s | score=%d",
+					leadPost.ExternalID,
+					classification.LeadScore,
+				)
+			}
 		}
 
 		log.Printf(
@@ -328,16 +360,20 @@ func (s *Scanner) ScanAll(ctx context.Context) error {
 		}
 	}
 
+	duration := time.Since(startedAt)
+
 	if err := s.scanRunRepo.Complete(
 		ctx,
 		scanRunID,
 		stats.PostsFound,
+		stats.CandidatesFound,
 		stats.NewPosts,
+		stats.ExistingPosts,
+		stats.GroqCalls,
+		duration.Milliseconds(),
 	); err != nil {
-		return err
+		return fmt.Errorf("complete scan run: %w", err)
 	}
-
-	duration := time.Since(startedAt)
 
 	log.Printf(
 		"=== SCAN RESULT === keywords=%d posts=%d candidates=%d new=%d existing=%d groq=%d duration=%s",

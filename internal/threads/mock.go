@@ -67,6 +67,13 @@ func NewMockClient() *MockClient {
 					-60 * time.Minute,
 				),
 			},
+			{
+				ID:          "mock-007",
+				Username:    "business_owner_007",
+				URL:         "https://www.threads.net/",
+				Content:     "Saya sedang mencari developer untuk membuat aplikasi inventory dan kasir untuk beberapa cabang. Budget sekitar 30 juta dan target mulai bulan ini. Ada yang bisa bantu?",
+				PublishedAt: time.Now().Add(-5 * time.Minute),
+			},
 		},
 	}
 }
